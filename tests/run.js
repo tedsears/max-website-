@@ -4,6 +4,7 @@ import { evalCards, categoryOf, makeDeck, forEachCombo, eval3, JOKER } from '../
 import { evalPG5, settings } from '../js/games/paigow.js';
 import { spanish21Bonus } from '../js/games/blackjack.js';
 import { renderSizing, pokerAdvice } from '../js/games/poker-common.js';
+import { defaultProfile, holdemStartT } from '../js/games/opponents.js';
 
 const G = Object.fromEntries(GAMES.map((g) => [g.id, g]));
 const card = (s) => '23456789TJQKA'.indexOf(s[0]) * 4 + 'shdc'.indexOf(s[1]);
@@ -101,7 +102,9 @@ const pg2 = run(G.paigow, { hero: cards('As Ad Kh Kc 5s 3d 2h'), bet: 25 }, 0.3)
 check('Pai Gow AA KK: split, kings in the low hand', pg2.low.every((c) => c >> 2 === 11) ? 1 : 0, 1, 1);
 let tot = 0; const N = 300;
 for (let i = 0; i < N; i++) {
-  const d = Array.from({ length: 53 }, (_, k) => k).sort(() => Math.random() - 0.5).slice(0, 7);
+  const d = Array.from({ length: 53 }, (_, k) => k);
+  for (let j = 52; j > 0; j--) { const r = Math.floor(Math.random() * (j + 1)); [d[j], d[r]] = [d[r], d[j]]; }
+  d.length = 7;
   tot += run(G.paigow, { hero: d, bet: 1 }, 0.16).results[0].ev;
 }
 check(`Pai Gow average EV over ${N} random hands`, tot / N, -0.085, 0.035); // known house edge about -2.5%; per-hand spread is wide
@@ -113,6 +116,32 @@ check('Sizing: strong hand deep stacks bets ~pot, not all-in', /Bet \$/.test(ren
 check('Sizing: short effective stack goes all-in', /All-in: \$120/.test(renderSizing(0.85, { ...st, oppStacks: '120' }, strongAdv)) ? 1 : 0, 1, 1);
 const callAdv = pokerAdvice(0.3, 1, 100, 20);
 check('Sizing: call shows call amount', /Call \$20/.test(renderSizing(0.3, { ...st, toCall: 20 }, callAdv)) ? 1 : 0, 1, 1);
+
+// Opponent modeling
+const prof = (preset, pre = 'any', post = 'none') => ({ ...defaultProfile(preset), pre, post });
+check('Start table: AA is top 1%', holdemStartT(cards('As Ah')), 0, 0.01);
+check('Start table: 72o is bottom 5%', holdemStartT(cards('7s 2h')), 0.95, 1);
+check('Start table: AKs in top 7%', holdemStartT(cards('As Ks')), 0, 0.07);
+const base = { board: [], dead: [], pot: 100, toCall: 0, modeling: true };
+const aaVsRock3b = run(G.holdem, { ...base, hero: cards('As Ah'), opponents: 1, profiles: [prof('rock', 'threebet')] }, 0.5).equity;
+check("AA vs a rock's 3-bet range is below 85% (vs random)", aaVsRock3b, 0.6, 0.83);
+const kqVsRaise = run(G.holdem, { ...base, hero: cards('Kd Qc'), opponents: 1, profiles: [prof('tag', 'raise')] }, 0.5).equity;
+const kqVsStation = run(G.holdem, { ...base, hero: cards('Kd Qc'), opponents: 1, profiles: [prof('station', 'limp')] }, 0.5).equity;
+check('KQo does worse vs TAG raise than vs station limp', kqVsStation - kqVsRaise, 0.03, 0.5);
+const riverNuts = (preset) => run(G.holdem, { ...base, hero: cards('As Ks'), board: cards('Qs Js Ts 2h 3d'), opponents: 1, profiles: [prof(preset, 'callraise', 'check')] }, 0.5);
+const rn = riverNuts('station');
+const bestOpt = [...rn.options].sort((a, b) => b.ev - a.ev)[0];
+check('Royal flush on river vs station: best option is a bet', bestOpt.code === 'bet' ? 1 : 0, 1, 1);
+const foldAll = (r) => Math.max(...r.options.filter((o) => o.code === 'bet').map((o) => o.foldAll));
+check('Stations fold less than rocks', foldAll(riverNuts('rock')) - foldAll(rn), 0.05, 1);
+const bluffSpot = run(G.holdem, { ...base, hero: cards('7d 2c'), board: cards('Ks 9h 4s 3c Jd'), opponents: 1, profiles: [prof('rock', 'callraise', 'check')] }, 0.5);
+const bOpt = [...bluffSpot.options].sort((a, b) => b.ev - a.ev)[0];
+check('Air on river vs a rock who checked: bluffing beats checking', bOpt.code === 'bet' ? 1 : 0, 1, 1);
+for (const id of ['omaha', 'stud', 'draw']) {
+  const st = { omaha: { hero: cards('As Ah Ks Kh'), board: [], dead: [] }, stud: { hero: cards('As Ah Kd 7c'), dead: [] }, draw: { hero: cards('Ks Kh 7d 4c 2s') } }[id];
+  const r = run(G[id], { ...st, opponents: 2, pot: 100, toCall: 20, modeling: true, profiles: [prof('lag', 'raise', 'bet'), prof('station', 'limp', 'call')] }, 0.3);
+  check(`${id} modeled run returns fold/call/raise options`, r.options && r.options.some((o) => o.code === 'fold') && r.options.some((o) => o.code === 'bet') ? 1 : 0, 1, 1);
+}
 
 console.log(fails ? `\n${fails} FAILED` : '\nAll checks passed');
 process.exit(fails ? 1 : 0);

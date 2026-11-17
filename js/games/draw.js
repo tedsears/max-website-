@@ -1,5 +1,6 @@
 import { makeDeck, shuffleFirst, evalCards, categoryOf, HAND_NAMES } from '../cards.js';
-import { potFields, pokerAdvice, renderSizing } from './poker-common.js';
+import { potFields, pokerAdvice, renderSizing, renderModeled } from './poker-common.js';
+import { setupModeling, startDist, drawStartScore, dealFromRange } from './opponents.js';
 import { banner, statGrid, table, pct, signedMoney, miniCards, trialsNote } from '../render.js';
 
 /** Simple opponent draw policy: stand on straight+, keep pairs/trips, keep 4-flushes, else keep the high card. */
@@ -31,41 +32,76 @@ export const draw = {
   *simulate(s, quality) {
     const { hero, opponents } = s;
     const deck = makeDeck(hero);
-    const perHold = Math.max(800, Math.round(10000 * quality));
+    let modeling = null;
+    const startT = (c) => startDist('draw', 5, drawStartScore).top(drawStartScore(c));
+    if (s.modeling) modeling = setupModeling(s, { deckCards: deck, k: 5, startT, nowT: startT, hasPost: false });
+    const perHold = Math.max(800, Math.round(10000 * quality * (modeling ? 0.3 : 1)));
     const results = [];
-    const mine = new Array(5), opp = new Array(5);
+    const mine = new Array(5);
+    const opp = Array.from({ length: opponents }, () => new Array(5));
+    const os = new Array(opponents), ot = new Array(opponents);
+    const n = deck.length;
+
+    // One deal: you draw for the given hold, opponents get (range-weighted) hands and draw.
+    const deal = (kept) => {
+      let p = 0;
+      for (let k = 0; k < opponents; k++) {
+        dealFromRange(deck, p, 5, opp[k], modeling ? modeling.accepts[k] : null);
+        ot[k] = modeling ? startT(opp[k]) : 0;
+        p += 5;
+      }
+      const rest = (5 - kept.length) + 5 * opponents;
+      for (let i = 0; i < rest; i++) {
+        const r = p + i + Math.floor(Math.random() * (n - p - i));
+        const x = deck[p + i]; deck[p + i] = deck[r]; deck[r] = x;
+      }
+      for (let i = 0; i < kept.length; i++) mine[i] = kept[i];
+      for (let i = kept.length; i < 5; i++) mine[i] = deck[p++];
+      for (let k = 0; k < opponents; k++) {
+        const keep = opponentKeepMask(opp[k]);
+        for (let j = 0; j < 5; j++) if (!(keep & (1 << j))) opp[k][j] = deck[p++];
+        os[k] = evalCards(opp[k], 5);
+      }
+      return evalCards(mine, 5);
+    };
+
     for (let mask = 0; mask < 32; mask++) {
       const kept = hero.filter((_, i) => mask & (1 << i));
-      const drawN = 5 - kept.length;
-      const need = drawN + 10 * opponents;
       let equity = 0, wins = 0;
       const cats = new Array(9).fill(0);
       for (let t = 0; t < perHold; t++) {
-        shuffleFirst(deck, need);
-        let p = 0;
-        for (let i = 0; i < kept.length; i++) mine[i] = kept[i];
-        for (let i = kept.length; i < 5; i++) mine[i] = deck[p++];
-        const hs = evalCards(mine, 5);
+        const hs = deal(kept);
         cats[categoryOf(hs)]++;
         let lost = false, tied = 0;
-        for (let k = 0; k < opponents; k++) {
-          for (let j = 0; j < 5; j++) opp[j] = deck[p++];
-          const keep = opponentKeepMask(opp);
-          for (let j = 0; j < 5; j++) if (!(keep & (1 << j))) opp[j] = deck[p++];
-          const os = evalCards(opp, 5);
-          if (os > hs) { lost = true; break; }
-          if (os === hs) tied++;
-        }
+        for (let k = 0; k < opponents; k++) { if (os[k] > hs) { lost = true; break; } if (os[k] === hs) tied++; }
         if (!lost) { if (tied === 0) { equity += 1; wins++; } else equity += 1 / (tied + 1); }
       }
       results.push({ mask, kept, equity: equity / perHold, wins: wins / perHold, cats });
-      yield (mask + 1) / 32;
+      yield (mask + 1) / (modeling ? 40 : 32);
     }
     results.sort((a, b) => b.equity - a.equity);
-    return { results, perHold };
+    let options = null;
+    if (modeling) {
+      // Decision pass for the best hold: fold / call / bet sizes with fold equity.
+      const kept = results[0].kept;
+      const N = perHold * 4;
+      for (let t = 1; t <= N; t++) {
+        const hs = deal(kept);
+        modeling.dec.add(hs, os, ot);
+        if (t % 1000 === 0) yield (32 + 8 * t / N) / 40;
+      }
+      options = modeling.dec.result();
+    }
+    return { results, perHold, options, oppInfo: modeling?.info };
   },
   render(r, s) {
     const best = r.results[0];
+    const keepRow = table('Best things to keep', ['Keep', 'Draw', 'Win share'],
+      r.results.slice(0, 8).map((x, i) => ({ hl: i === 0, cells: [miniCards(x.kept), 5 - x.kept.length, pct(x.equity)] })));
+    if (r.options) {
+      return renderModeled(r, s, best.equity).replace('<div class="banner-reason">', `<div class="banner-reason">Keep ${miniCards(best.kept)}<br>`) +
+        keepRow + trialsNote(r.perHold * 32, 'Opponents get hands from the ranges their stats imply, then draw with a simple strategy. Results assume no more betting after this decision.');
+    }
     const adv = pokerAdvice(best.equity, s.opponents, s.pot, s.toCall);
     const topCat = best.cats.indexOf(Math.max(...best.cats));
     const keepText = best.kept.length === 5 ? 'Stand pat (keep all 5)'
@@ -79,8 +115,7 @@ export const draw = {
         ['EV of calling', s.toCall > 0 ? signedMoney(adv.evCall) : '—'],
         ['Most likely final hand', HAND_NAMES[topCat]],
       ]) +
-      table('Best things to keep', ['Keep', 'Draw', 'Win share'],
-        r.results.slice(0, 8).map((x, i) => ({ hl: i === 0, cells: [miniCards(x.kept), 5 - x.kept.length, pct(x.equity)] }))) +
+      keepRow +
       trialsNote(r.perHold * 32, 'Opponents draw with a simple strategy: keep pairs or better, keep four-flushes, otherwise keep their highest card.');
   },
 };

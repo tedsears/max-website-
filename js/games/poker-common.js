@@ -1,6 +1,6 @@
 // Shared betting advice and result rendering for the poker games.
 import { HAND_NAMES } from '../cards.js';
-import { banner, statGrid, bars, pct, money, signedMoney, trialsNote, note, esc } from '../render.js';
+import { banner, statGrid, bars, table, pct, money, signedMoney, trialsNote, note, esc } from '../render.js';
 
 export const potFields = [
   { type: 'number', key: 'opponents', label: 'Opponents still in the hand', min: 1, max: 9, step: 1, value: 2 },
@@ -8,6 +8,8 @@ export const potFields = [
     help: 'Everything already in the middle, including bets made this round.' },
   { type: 'number', key: 'toCall', label: 'Amount you must call ($)', min: 0, max: 1e7, step: 1, value: 20,
     help: '0 if nobody has bet yet.' },
+  { type: 'checkbox', key: 'modeling', label: 'Opponent stats: model each opponent (VPIP, PFR, AF, 3-bet, WTSD)', value: false, toggle: true },
+  { type: 'opponents', key: 'profiles', showIf: 'modeling' },
   { type: 'checkbox', key: 'sizing', label: 'Bet sizing: tell me how much to bet', value: false, toggle: true },
   { type: 'number', key: 'stack', label: 'Your stack ($)', min: 0, max: 1e9, step: 1, value: 500, showIf: 'sizing',
     help: 'Money in front of you, not counting what is already in the pot.' },
@@ -109,8 +111,40 @@ export function pokerAdvice(equity, opponents, pot, toCall) {
   return { action, tone, reason, potOdds, evCall, fair };
 }
 
+/** Banner + option table + opponent summary when opponent modeling is on. */
+export function renderModeled(r, s, equity) {
+  const opts = [...r.options].sort((a, b) => b.ev - a.ev);
+  const best = opts[0], next = opts[1];
+  const fair = 1 / (s.opponents + 1);
+  const isBet = best.code === 'bet';
+  const bluff = isBet && equity < fair * 0.75;
+  const thin = isBet && !bluff && equity < fair;
+  const tone = best.code === 'fold' ? 'bad' : isBet ? 'good' : best.ev > 0 ? 'ok' : 'neutral';
+  let reason = `Average result ${signedMoney(best.ev)} versus ${signedMoney(next.ev)} for ${next.label.toLowerCase()}.`;
+  if (isBet) reason += ` Everyone folds ${pct(best.foldAll)} of the time.`;
+  if (bluff) reason += ` Your hand is behind their ranges (${pct(equity)} equity), so this works as a ${s.board && s.board.length < 5 ? 'semi-bluff' : 'bluff'}: the folds pay for it.`;
+  else if (thin) reason += ` You are slightly behind a fair share (${pct(equity)} equity vs ${pct(fair)}), but the folds make betting pay.`;
+  else if (isBet) reason += ` You are ahead of their ranges (${pct(equity)} equity); this size gets the most value.`;
+  return banner(best.label + (bluff ? ' (bluff)' : ''), tone, reason) +
+    table('Every option against these opponents', ['Option', 'Average result', 'All fold'],
+      opts.map((o) => ({ hl: o === best, cells: [esc(o.label), signedMoney(o.ev), o.foldAll != null ? pct(o.foldAll) : '—'] }))) +
+    table('Opponent read', ['#', 'Type', 'Action', 'Range', 'Folds to ⅔-pot bet'],
+      r.oppInfo.map((o, i) => ({ cells: [i + 1, esc(o.type), esc(o.pre) + (o.post ? ` · ${esc(o.post)}` : ''), `top ${pct(Math.max(0, o.rangePct), 0)}`, pct(o.foldToPot, 0)] })));
+}
+
 /** Standard result panel for an equity simulation. */
 export function renderEquity(r, s, extraNote = '') {
+  if (r.options) {
+    const total = r.trials;
+    return renderModeled(r, s, r.equity) +
+      statGrid([
+        ['Win at showdown', pct(r.wins / total)],
+        ['Split pot', pct(r.ties / total)],
+        ['Equity vs their ranges', pct(r.equity)],
+      ]) +
+      trialsNote(total, 'Opponents are dealt hands from the ranges their stats and actions imply. Fold rates come from WTSD and bet size. Results assume no more betting after this decision.') +
+      (extraNote ? note(extraNote) : '');
+  }
   const adv = pokerAdvice(r.equity, s.opponents, s.pot, s.toCall);
   const total = r.trials;
   const catRows = r.cats

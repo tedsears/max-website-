@@ -19,6 +19,16 @@ Monte Carlo odds and best-play advice for ten card games. Pick a game, enter the
 
 Tick **Bet sizing** to enter your stack and each opponent's stack. The site then suggests a dollar amount: bigger bets with a bigger edge (half pot to full pot), all-in when the stack is small relative to the pot, capped at the effective stack (the most the biggest opponent can call). It also shows the largest call that is still profitable.
 
+## Opponent stats (poker games)
+
+Tick **Opponent stats** to describe each opponent: pick a preset (Rock, TAG, LAG, Calling station, Maniac) or enter VPIP, PFR, AF, 3-bet % and WTSD %, plus what they did this hand.
+
+- **Ranges:** opponents are dealt only hands consistent with their stats and actions (e.g. an open-raise from a 9% PFR player = roughly the top 9% of starting hands; a postflop bet from a high-AF player = a wider, bluffier range).
+- **Fold equity:** how often each opponent folds to a bet comes from WTSD and the bet size.
+- **Decision:** the simulation compares fold / check / call against several bet or raise sizes (and all-in when stacks are entered) and recommends the highest average result, including bluffs when folds make them profitable.
+
+Starting-hand strength is ranked by equity against a random hand (Hold'em) or a heuristic score (Omaha, Stud, Draw). The model assumes no betting after the current decision.
+
 ## Run locally
 
 It's a static site with no build step, but ES modules need a web server (opening `index.html` directly from disk won't work):

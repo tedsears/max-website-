@@ -2,6 +2,7 @@
 import { GAMES } from './games/index.js';
 import { cardLabel, cardClass, SUIT_NAMES, SUIT_SYMBOLS, RANK_LABELS, JOKER } from './cards.js';
 import { esc } from './render.js';
+import { PRESETS, PRE_ACTIONS, POST_ACTIONS, defaultProfile } from './games/opponents.js';
 
 const $ = (sel) => document.querySelector(sel);
 const RANK_ORDER = [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]; // A K Q J 10 ... 2
@@ -19,6 +20,7 @@ function defaults(g) {
   for (const f of g.fields) {
     if (f.type === 'cards' || f.type === 'ranks') s[f.key] = [];
     else if (f.type === 'counts') s[f.key] = new Array(f.groups.length).fill(0);
+    else if (f.type === 'opponents') s[f.key] = [];
     else s[f.key] = f.value;
   }
   return s;
@@ -76,7 +78,34 @@ function countsField(f) {
       <button data-count="${f.key}" data-i="${i}" data-d="1" aria-label="more ${esc(g)}">+</button></div>`).join('')}</div></div>`;
 }
 
+const OPP_STATS = [
+  ['vpip', 'VPIP %', 'How often they put money in voluntarily before the flop', 0, 100, 1],
+  ['pfr', 'PFR %', 'How often they raise before the flop', 0, 100, 1],
+  ['af', 'AF', 'Aggression factor: (bets + raises) / calls', 0, 10, 0.1],
+  ['threeBet', '3-bet %', 'How often they re-raise a raise', 0, 100, 1],
+  ['wtsd', 'WTSD %', 'Went to showdown: how often they call all the way down after seeing the flop', 0, 100, 1],
+];
+
+function opponentsPanel(f) {
+  const list = state[f.key];
+  while (list.length < state.opponents) list.push(defaultProfile());
+  const options = (obj, sel) => Object.entries(obj).map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(typeof v === 'string' ? v : v.name)}</option>`).join('');
+  return `<div class="opps">${list.slice(0, state.opponents).map((p, i) => `
+    <div class="opp">
+      <div class="opp-head"><b>Opponent ${i + 1}</b>
+        <select data-opp="${i}" data-opp-field="preset">${options(PRESETS, p.preset)}<option value="custom" ${p.preset === 'custom' ? 'selected' : ''}>Custom</option></select></div>
+      <div class="opp-stats">${OPP_STATS.map(([k, label, tip, min, max, step]) =>
+        `<label title="${esc(tip)}"><span>${label}</span><input type="number" data-opp="${i}" data-opp-field="${k}" min="${min}" max="${max}" step="${step}" value="${p[k]}"></label>`).join('')}</div>
+      <div class="opp-actions">
+        <label><span>${game.id === 'holdem' || game.id === 'omaha' ? 'Before the flop' : 'First betting round'}</span><select data-opp="${i}" data-opp-field="pre">${options(PRE_ACTIONS, p.pre)}</select></label>
+        ${game.hasPostflop ? `<label><span>${game.id === 'stud' ? 'Later streets' : 'After the flop'}</span><select data-opp="${i}" data-opp-field="post">${options(POST_ACTIONS, p.post)}</select></label>` : ''}
+      </div>
+    </div>`).join('')}
+    <p class="hint">Stats come from a HUD or your own notes. Hover a label for what it means. Later-street actions only count once there is a flop (Hold'em/Omaha) or a 4th card (Stud).</p></div>`;
+}
+
 function inputField(f) {
+  if (f.type === 'opponents') return opponentsPanel(f);
   if (f.type === 'checkbox') {
     return `<label class="field check${f.toggle ? ' toggle' : ''}"><input type="checkbox" data-key="${f.key}" ${state[f.key] ? 'checked' : ''}> ${esc(f.label)}</label>`;
   }
@@ -135,7 +164,8 @@ function dealRandom() {
   for (const f of pickerFields()) state[f.key] = [];
   const n = game.fields.some((f) => f.joker) ? 53 : 52;
   const excluded = new Set(game.fields.flatMap((f) => f.excludeRanks || []));
-  const deck = Array.from({ length: n }, (_, i) => i).filter((c) => c === JOKER || !excluded.has(c >> 2)).sort(() => Math.random() - 0.5);
+  const deck = Array.from({ length: n }, (_, i) => i).filter((c) => c === JOKER || !excluded.has(c >> 2));
+  for (let j = deck.length - 1; j > 0; j--) { const r = Math.floor(Math.random() * (j + 1)); [deck[j], deck[r]] = [deck[r], deck[j]]; }
   for (const f of pickerFields()) {
     if (f.optional) continue;
     const n = f.key === 'board' ? [0, 3, 4, 5][Math.floor(Math.random() * 4)] : f.min;
@@ -178,6 +208,22 @@ function onClick(e) {
 
 function onInput(e) {
   if (e.target.id === 'quality') { quality = e.target.value; return; }
+  const oppField = e.target.dataset.oppField;
+  if (oppField) {
+    const p = state.profiles[Number(e.target.dataset.opp)];
+    if (oppField === 'preset') {
+      if (e.target.value !== 'custom') Object.assign(p, defaultProfile(e.target.value), { pre: p.pre, post: p.post });
+      else p.preset = 'custom';
+      if (e.type === 'change') renderForm();
+    } else if (oppField === 'pre' || oppField === 'post') {
+      p[oppField] = e.target.value;
+    } else {
+      const v = parseFloat(e.target.value);
+      if (Number.isFinite(v)) { p[oppField] = v; p.preset = 'custom'; }
+      if (e.type === 'change') renderForm();
+    }
+    return;
+  }
   const key = e.target.dataset.key;
   if (!key) return;
   const f = game.fields.find((x) => x.key === key);
@@ -188,6 +234,7 @@ function onInput(e) {
   else {
     const v = parseFloat(e.target.value);
     state[key] = Number.isFinite(v) ? Math.min(f.max, Math.max(f.min, v)) : f.value;
+    if (key === 'opponents' && e.type === 'change' && state.modeling) renderForm();
   }
 }
 
