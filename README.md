@@ -1,6 +1,6 @@
 # Card Odds Lab
 
-Monte Carlo odds and best-play advice for eight card games. Pick a game, enter the cards you can see and the money involved, and the site deals out the rest of the hand thousands of times to find what you should do.
+Monte Carlo odds and best-play advice for ten card games. Pick a game, enter the cards you can see and the money involved, and the site deals out the rest of the hand thousands of times to find what you should do.
 
 | Game | What it tells you | Method |
 |---|---|---|
@@ -9,9 +9,15 @@ Monte Carlo odds and best-play advice for eight card games. Pick a game, enter t
 | Seven-Card Stud | Equity with opponents' up-cards removed | Monte Carlo |
 | Five-Card Draw | Best cards to keep, then fold/call/raise | Monte Carlo (all 32 holds) |
 | Blackjack | EV of stand / hit / double / split / surrender, plus basic strategy | Monte Carlo over the actual shoe |
+| Spanish 21 | Same, with no 10s, player 21 always wins, 5+ card and 6-7-8 / 7-7-7 bonuses, double on any cards, optional redoubling | Monte Carlo |
 | Video Poker (9/6 Jacks or Better) | Best hold and its expected return | Exact for ≤3-card draws, sampled otherwise |
 | Three Card Poker | Play or fold | Exact (all dealer hands) |
+| Pai Gow Poker (53 cards, joker) | Best way to split 7 cards into 5 + 2 | Monte Carlo vs. a simulated dealer "house way" |
 | Baccarat | Best bet and house edge for the remaining shoe | Monte Carlo |
+
+## Bet sizing (poker games)
+
+Tick **Bet sizing** to enter your stack and each opponent's stack. The site then suggests a dollar amount: bigger bets with a bigger edge (half pot to full pot), all-in when the stack is small relative to the pot, capped at the effective stack (the most the biggest opponent can call). It also shows the largest call that is still profitable.
 
 ## Run locally
 
@@ -52,4 +58,6 @@ To add a game, create a module with `id`, `name`, `description`, `fields`, `vali
 
 - Poker opponents are dealt random cards. Real opponents who keep betting tend to hold stronger hands, so treat the advice as an upper bound on your chances.
 - Poker advice compares your equity against the pot odds for the current bet only; it doesn't model future betting rounds.
-- Blackjack: after your first move, later decisions follow basic strategy; no re-splitting; dealer has peeked for blackjack.
+- Blackjack and Spanish 21: after your first move, later decisions follow regular blackjack basic strategy; no re-splitting; dealer has peeked for blackjack. Spanish 21 suited bonuses are not counted.
+- Pai Gow: the dealer sets hands to maximize the strength of both halves, an approximation of the casino house way.
+- Bet sizing is a rule of thumb, not a solver: it ignores future betting rounds and opponents' tendencies.

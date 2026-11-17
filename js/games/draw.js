@@ -1,5 +1,5 @@
 import { makeDeck, shuffleFirst, evalCards, categoryOf, HAND_NAMES } from '../cards.js';
-import { potFields, pokerAdvice } from './poker-common.js';
+import { potFields, pokerAdvice, renderSizing } from './poker-common.js';
 import { banner, statGrid, table, pct, signedMoney, miniCards, trialsNote } from '../render.js';
 
 /** Simple opponent draw policy: stand on straight+, keep pairs/trips, keep 4-flushes, else keep the high card. */
@@ -72,6 +72,7 @@ export const draw = {
       : best.kept.length === 0 ? 'Draw 5 new cards' : `Keep ${best.kept.length}, draw ${5 - best.kept.length}`;
     return banner(`${adv.action} · ${keepText}`, adv.tone,
       `Best cards to keep: ${miniCards(best.kept)}<br>${adv.reason}`) +
+      (s.sizing ? renderSizing(best.equity, s, adv) : '') +
       statGrid([
         ['Equity with best draw', pct(best.equity)],
         ['Equity needed', s.toCall > 0 ? pct(adv.potOdds) : '—', 'pot odds'],

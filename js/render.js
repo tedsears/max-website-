@@ -1,5 +1,5 @@
 // Small HTML helpers for result panels.
-import { cardLabel, SUIT_NAMES } from './cards.js';
+import { cardLabel, cardClass } from './cards.js';
 
 export const pct = (x, d = 1) => (x * 100).toFixed(d) + '%';
 export const money = (x) => (x < 0 ? '-$' : '$') + Math.abs(x).toFixed(2);
@@ -36,7 +36,7 @@ export function table(title, headers, rows) {
 
 export function miniCards(cards) {
   if (!cards.length) return '<span class="muted">(draw all 5)</span>';
-  return cards.map((c) => `<span class="mini ${SUIT_NAMES[c & 3]}">${cardLabel(c)}</span>`).join('');
+  return cards.map((c) => `<span class="mini ${cardClass(c)}">${cardLabel(c)}</span>`).join('');
 }
 
 export function note(text) {

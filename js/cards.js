@@ -8,7 +8,9 @@ export const SUIT_NAMES = ['spades', 'hearts', 'diamonds', 'clubs'];
 
 export const rankOf = (c) => c >> 2;
 export const suitOf = (c) => c & 3;
-export const cardLabel = (c) => RANK_LABELS[c >> 2] + SUIT_SYMBOLS[c & 3];
+export const JOKER = 52;
+export const cardLabel = (c) => (c === JOKER ? 'Joker' : RANK_LABELS[c >> 2] + SUIT_SYMBOLS[c & 3]);
+export const cardClass = (c) => (c === JOKER ? 'joker' : SUIT_NAMES[c & 3]);
 
 export const HAND_NAMES = [
   'High Card', 'Pair', 'Two Pair', 'Three of a Kind', 'Straight',

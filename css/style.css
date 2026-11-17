@@ -151,3 +151,21 @@ tr.hl td { background: #ecfdf3; font-weight: 600; }
 .note { font-size: 0.8rem; color: var(--muted); margin: 10px 0 0; line-height: 1.4; }
 
 footer { text-align: center; color: rgba(255, 255, 255, 0.7); font-size: 0.85rem; padding: 0 16px 24px; }
+
+/* Joker (Pai Gow) */
+.joker { color: #6d28d9; }
+.joker-row { display: flex; }
+.joker-row .pick { flex-direction: row; gap: 6px; padding: 6px 14px; }
+.playing-card.joker { font-size: 0.7rem; }
+
+/* Optional settings panel (bet sizing) */
+.optional-panel { margin-top: 16px; border: 1px dashed #cbd5e1; border-radius: var(--radius); padding: 10px 12px; }
+.optional-panel.open { border-style: solid; border-color: var(--accent); background: #fffdf3; }
+.optional-panel .inputs { margin-top: 10px; }
+.field.toggle { font-weight: 600; }
+
+.sizing { margin-top: 14px; border: 1px solid var(--accent); background: #fffbea; border-radius: var(--radius); padding: 12px 14px; }
+.sizing h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.sizing-main { font-size: 1.35rem; font-weight: 800; }
+.sizing ul { margin: 8px 0 0; padding-left: 18px; font-size: 0.88rem; }
+.sizing li { margin-bottom: 3px; }

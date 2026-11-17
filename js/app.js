@@ -1,6 +1,6 @@
 // UI: game tabs, card pickers, inputs, and the time-sliced simulation runner.
 import { GAMES } from './games/index.js';
-import { cardLabel, SUIT_NAMES, SUIT_SYMBOLS, RANK_LABELS } from './cards.js';
+import { cardLabel, cardClass, SUIT_NAMES, SUIT_SYMBOLS, RANK_LABELS, JOKER } from './cards.js';
 import { esc } from './render.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -39,7 +39,7 @@ function selectGame(id) {
 
 function chip(field, value) {
   if (field.type === 'cards') {
-    return `<button class="playing-card ${SUIT_NAMES[value & 3]}" data-remove="${field.key}" data-value="${value}" title="Remove">${cardLabel(value)}</button>`;
+    return `<button class="playing-card ${cardClass(value)}" data-remove="${field.key}" data-value="${value}" title="Remove">${cardLabel(value)}</button>`;
   }
   return `<button class="playing-card rank" data-remove="${field.key}" data-value="${value}" title="Remove">${RANK_LABELS[value]}</button>`;
 }
@@ -56,14 +56,16 @@ function slotGroup(f) {
 
 function cardGrid() {
   const used = usedCards();
-  return `<div class="card-grid">${[0, 1, 2, 3].map((s) => `<div class="grid-row">${RANK_ORDER.map((r) => {
+  const joker = game.fields.some((f) => f.joker);
+  return `<div class="card-grid">${joker ? `<div class="joker-row"><button class="pick joker" data-card="${JOKER}" ${used.has(JOKER) ? 'disabled' : ''}>Joker <span>★</span></button></div>` : ''}${[0, 1, 2, 3].map((s) => `<div class="grid-row">${RANK_ORDER.map((r) => {
     const c = r * 4 + s;
     return `<button class="pick ${SUIT_NAMES[s]}" data-card="${c}" ${used.has(c) ? 'disabled' : ''}>${RANK_LABELS[r]}<span>${SUIT_SYMBOLS[s]}</span></button>`;
   }).join('')}</div>`).join('')}</div>`;
 }
 
 function rankGrid() {
-  return `<div class="rank-grid">${PICK_ORDER.map((r) => `<button class="pick rank" data-rank="${r}">${RANK_LABELS[r]}</button>`).join('')}</div>`;
+  const excluded = new Set(game.fields.flatMap((f) => f.excludeRanks || []));
+  return `<div class="rank-grid">${PICK_ORDER.map((r) => `<button class="pick rank" data-rank="${r}" ${excluded.has(r) ? 'disabled title="Not in this deck"' : ''}>${RANK_LABELS[r]}</button>`).join('')}</div>`;
 }
 
 function countsField(f) {
@@ -76,15 +78,22 @@ function countsField(f) {
 
 function inputField(f) {
   if (f.type === 'checkbox') {
-    return `<label class="field check"><input type="checkbox" data-key="${f.key}" ${state[f.key] ? 'checked' : ''}> ${esc(f.label)}</label>`;
+    return `<label class="field check${f.toggle ? ' toggle' : ''}"><input type="checkbox" data-key="${f.key}" ${state[f.key] ? 'checked' : ''}> ${esc(f.label)}</label>`;
+  }
+  if (f.type === 'text') {
+    return `<label class="field num"><span>${esc(f.label)}</span>
+      <input type="text" data-key="${f.key}" value="${esc(state[f.key])}" placeholder="${esc(f.placeholder || '')}">
+      ${f.help ? `<small>${esc(f.help)}</small>` : ''}</label>`;
   }
   return `<label class="field num"><span>${esc(f.label)}</span>
     <input type="number" data-key="${f.key}" min="${f.min}" max="${f.max}" step="${f.step}" value="${state[f.key]}">
     ${f.help ? `<small>${esc(f.help)}</small>` : ''}</label>`;
 }
 
+const visible = (f) => !f.showIf || state[f.showIf];
+
 function renderForm() {
-  const fields = game.fields;
+  const fields = game.fields.filter(visible);
   const hasCards = fields.some((f) => f.type === 'cards');
   const hasRanks = fields.some((f) => f.type === 'ranks');
   const pickers = pickerFields();
@@ -94,7 +103,9 @@ function renderForm() {
       <p class="hint">Click a box above to choose where cards go, then click cards below. Click a chosen card to remove it.</p>` : ''}
     ${hasCards ? cardGrid() : ''}${hasRanks ? rankGrid() : ''}
     ${fields.filter((f) => f.type === 'counts').map(countsField).join('')}
-    <div class="inputs">${fields.filter((f) => f.type === 'number' || f.type === 'checkbox').map(inputField).join('')}</div>
+    <div class="inputs">${fields.filter((f) => ['number', 'checkbox', 'text'].includes(f.type) && !f.showIf && !f.toggle).map(inputField).join('')}</div>
+    ${fields.filter((f) => f.toggle).map((t) => `<div class="optional-panel${state[t.key] ? ' open' : ''}">${inputField(t)}
+      ${state[t.key] ? `<div class="inputs">${fields.filter((f) => f.showIf === t.key).map(inputField).join('')}</div>` : ''}</div>`).join('')}
     <div class="actions">
       <label class="quality">Accuracy
         <select id="quality">${Object.keys(QUALITY).map((q) => `<option value="${q}" ${q === quality ? 'selected' : ''}>${q[0].toUpperCase() + q.slice(1)}</option>`).join('')}</select>
@@ -122,7 +133,9 @@ function addValue(value) {
 
 function dealRandom() {
   for (const f of pickerFields()) state[f.key] = [];
-  const deck = Array.from({ length: 52 }, (_, i) => i).sort(() => Math.random() - 0.5);
+  const n = game.fields.some((f) => f.joker) ? 53 : 52;
+  const excluded = new Set(game.fields.flatMap((f) => f.excludeRanks || []));
+  const deck = Array.from({ length: n }, (_, i) => i).filter((c) => c === JOKER || !excluded.has(c >> 2)).sort(() => Math.random() - 0.5);
   for (const f of pickerFields()) {
     if (f.optional) continue;
     const n = f.key === 'board' ? [0, 3, 4, 5][Math.floor(Math.random() * 4)] : f.min;
@@ -168,7 +181,10 @@ function onInput(e) {
   const key = e.target.dataset.key;
   if (!key) return;
   const f = game.fields.find((x) => x.key === key);
-  if (f.type === 'checkbox') state[key] = e.target.checked;
+  if (f.type === 'checkbox') {
+    state[key] = e.target.checked;
+    if (e.type === 'change' && game.fields.some((x) => x.showIf === key)) renderForm();
+  } else if (f.type === 'text') state[key] = e.target.value;
   else {
     const v = parseFloat(e.target.value);
     state[key] = Number.isFinite(v) ? Math.min(f.max, Math.max(f.min, v)) : f.value;
@@ -185,7 +201,7 @@ function run() {
   for (const f of pickerFields()) {
     if (state[f.key].length < f.min) return showError(`${f.label}: pick at least ${f.min}.`);
   }
-  for (const f of game.fields.filter((x) => x.type === 'number')) {
+  for (const f of game.fields.filter((x) => x.type === 'number' && visible(x))) {
     if (f.step === 1 && !Number.isInteger(state[f.key])) state[f.key] = Math.round(state[f.key]);
   }
   const snapshot = structuredClone(state);
