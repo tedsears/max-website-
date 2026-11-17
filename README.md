@@ -29,6 +29,10 @@ Tick **Opponent stats** to describe each opponent: pick a preset (Rock, TAG, LAG
 
 Starting-hand strength is ranked by equity against a random hand (Hold'em) or a heuristic score (Omaha, Stud, Draw). The model assumes no betting after the current decision.
 
+## Practice Pen (`pen.html`)
+
+Play no-limit Texas Hold'em against 1-8 simulated players, each set to level 1-10. Every decision is scored with the same Monte Carlo the calculators use (average-player ranges, fold equity, no betting after the current decision). Level 10 always takes the best-scoring option; lower levels pick among the options more randomly (softmax over EV, wider as the level drops). **End session & review** lists each of your decisions, the best option, and the expected chips given up.
+
 ## Run locally
 
 It's a static site with no build step, but ES modules need a web server (opening `index.html` directly from disk won't work):
@@ -54,6 +58,8 @@ The tests check the hand evaluators against exact combinatorial counts and the s
 
 ```
 index.html          page shell
+pen.html            Practice Pen page
+js/pen.js           Practice Pen game engine, bots, review
 css/style.css       styles
 js/cards.js         deck, 5–7 card evaluator, Omaha, 3-card, video poker paytable
 js/render.js        result-panel HTML helpers

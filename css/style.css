@@ -180,3 +180,23 @@ footer { text-align: center; color: rgba(255, 255, 255, 0.7); font-size: 0.85rem
 .opp-stats input { width: 100%; }
 .opp-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
 @media (max-width: 520px) { .opp-stats { grid-template-columns: repeat(3, 1fr); } .opp-actions { grid-template-columns: 1fr; } }
+
+/* Practice Pen */
+.toplink { color: var(--accent); font-weight: 600; }
+main.single { grid-template-columns: minmax(0, 900px); justify-content: center; }
+#pen h2 { margin-top: 0; }
+.bot-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.bot-row select, .quality input { font: inherit; padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1; width: 90px; }
+.table-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.board { display: flex; gap: 6px; justify-content: center; padding: 18px; margin: 10px 0; background: var(--felt); border-radius: 60px; min-height: 84px; align-items: center; }
+.board .muted { color: rgba(255, 255, 255, 0.7); }
+.seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.seat { border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 0.9rem; display: grid; gap: 4px; }
+.seat.turn { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.seat.folded { opacity: 0.45; }
+.dealer { background: var(--ink); color: #fff; border-radius: 50%; padding: 0 6px; font-size: 0.75rem; }
+.pcard { display: inline-block; min-width: 34px; padding: 6px 4px; margin-right: 3px; text-align: center; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; font-weight: 700; font-size: 0.9rem; }
+.pcard.back { background: repeating-linear-gradient(45deg, #1e40af, #1e40af 4px, #2563eb 4px, #2563eb 8px); height: 31px; }
+.log { margin-top: 12px; font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+.grade { padding: 2px 8px; border-radius: 999px; color: #fff; font-size: 0.78rem; font-weight: 700; }
+.grade.good { background: var(--good); } .grade.ok { background: var(--ok); } .grade.bad { background: var(--bad); }
